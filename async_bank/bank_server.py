@@ -1,5 +1,6 @@
+import json
 import asyncio
-from async_bank.bank import Bank
+from async_bank.bank import Bank, BankAccount
 
 
 class BankServerProtocol(asyncio.Protocol):
@@ -9,16 +10,25 @@ class BankServerProtocol(asyncio.Protocol):
         self.transport = transport
 
     def data_received(self, data):
+        transfer_flag = False
         received_message = data.decode()
-        piggy_bank.transact(message=received_message, log=piggy_bank.transact_log)
+        if 'account_from' in json.loads(received_message).keys():
+            transfer_flag = True
 
-        # print('Data received: {!r}'.format(message))
+        piggy_bank.message_log_update("{}\n".format(received_message))
+        if transfer_flag:
+            account_from, account_to, result = piggy_bank.transact(message=received_message, log=piggy_bank.transact_log)
+        else:
+            account, result = piggy_bank.transact(message=received_message, log=piggy_bank.transact_log)
 
-        #print('Send: {!r}'.format(message))
-        #self.transport.write(data)
-
-        # print('Close the client socket')
-        #self.transport.close()
+        if transfer_flag:
+            self.transport.write(json.dumps(account_from.__dict__).encode())
+            self.transport.write(json.dumps(account_from.__dict__).encode())
+        else:
+            if isinstance(account, BankAccount):
+                self.transport.write(json.dumps(account.__dict__).encode())
+            else:
+                self.transport.write(json.dumps(account).encode())
 
 
 piggy_bank = Bank()

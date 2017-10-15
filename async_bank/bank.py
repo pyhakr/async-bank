@@ -1,9 +1,16 @@
 import json
 import random
 
+class BankAccount:
+    def __init__(self, account_id=0, funds=0):
+        self.account_id = account_id
+        self.balance = funds
+        pass
 
 class Bank:
     def __init__(self):
+        self.accounts = {}
+        self.message_log = 'messages.log'
         self.transact_log = 'transact.log'
         self.message = {"id": None,
                         "account": None,
@@ -16,55 +23,102 @@ class Bank:
                            "transfer": self.transfer_funds,
                            "check": self.check_balance}
 
-    def bank_log_update(self, result=None):
+    def message_log_update(self, new_message=None):
+        with open(self.message_log, mode='a') as log_file:
+            log_file.write(new_message)
+        print("message log updated")
+
+    def transact_log_update(self, result=None):
         with open(self.transact_log, mode='a') as log_file:
             log_file.write(result)
-        print("log updated")
+        print("transact log updated")
 
     def transact(self, message=None, log=None):
 
         message = json.loads(message)
+
+        if 'account_from' and 'account_to' in message.keys():
+            account_from = message["account_from"]
+            account_to = message["account_to"]
+            message['account'] = None
+        else:
+            account_from = None
+            account_to = None
+
         account = message["account"]
         action = message["action"]
         funds = message["funds"]
         transact_id = message["id"]
 
+        # open, deposit or withdraw
         if account and funds:
-            self.action_map[action](account=account, funds=funds)
+            account, result = self.action_map[action](account=account, funds=funds, transact_id=transact_id)
+            self.transact_log_update(result=result)
 
+        # check balance
         if account and not funds:
-            self.action_map[action](account=account)
+            account, result = self.action_map[action](account=account, transact_id=transact_id)
+            self.transact_log_update(result=result)
 
-        if funds and not account:
-            result = self.action_map[action](funds=funds, transact_id=transact_id)
-            self.bank_log_update(result=result)
+        # if funds and not account:
+        #     account, result = self.action_map[action](funds=funds, transact_id=transact_id)
+        #     self.transact_log_update(result=result)
+        #
 
-    def open_account(self, funds=None, transact_id=None):
-        account_id = random.randrange(10000, 20000)
-        new_account = BankAccount(account_id=account_id, funds=funds)
-        return "{} --> NEW ACCOUNT CREATED: {} BALANCE: {}\n". format(transact_id,
-                                                                    new_account.account_id,
-                                                                    new_account.balance)
+        # transfer
+        if account_from and account_to:
+            account_from, account_to, result = \
+                self.action_map[action](account_from=account_from, account_to=account_to,
+                                        funds=funds, transact_id=transact_id)
+            self.transact_log_update(result=result)
+            return account_from, account_to, result
 
-    def withdraw_funds(self, account=None, funds=None):
-        pass
+        return account, result
 
-    def deposit_funds(self, account=None, funds=None):
-        pass
+    def open_account(self, account=None, funds=None, transact_id=None):
+        account_id = account
+        new_account = BankAccount(account_id=account, funds=funds)
+        self.accounts[account_id] = new_account
+        return new_account, \
+               "{} --> NEW ACCOUNT CREATED: {} BALANCE: {}\n". format(transact_id,
+                                                                      new_account.account_id,
+                                                                      new_account.balance)
 
-    def transfer_funds(self, accounts=None, funds=None):
-        pass
+    def withdraw_funds(self, account=None, funds=None, transact_id=None):
+        if not account or account not in self.accounts:
+            return account, "{}: INVALID ACCOUNT\n".format(account)
+        else:
+            self.accounts[account].balance -= funds
+            return self.accounts[account],\
+                "{} --> WITHDRAW COMPLETE: {} AMOUNT: {} NEW BALANCE: {}\n"\
+                .format(transact_id, self.accounts[account].account_id, funds, self.accounts[account].balance)
 
-    def check_balance(self, account=None):
-        pass
+    def deposit_funds(self, account=None, funds=None, transact_id=None):
+        if not account or account not in self.accounts:
+            return account, "{}: INVALID ACCOUNT\n".format(account)
+        else:
+            self.accounts[account].balance += funds
+            return self.accounts[account],\
+                "{} --> DEPOSIT COMPLETE: {} AMOUNT: {} NEW BALANCE: {}\n"\
+                .format(transact_id, self.accounts[account].account_id, funds, self.accounts[account].balance)
+
+    def transfer_funds(self, account_from=None, account_to=None, funds=None, transact_id=None):
+        if not account_from or not account_to:
+            return account_from, account_to, "{} : {} INVALID ACCOUNTS\n".format(account_from, account_to)
+        else:
+            self.accounts[account_from].balance -= funds
+            self.accounts[account_to].balance += funds
+            return self.accounts[account_from], self.accounts[account_to], \
+                   "{} --> TRANSFER COMPLETE: {} AMOUNT: {} NEW BALANCE: {}\n" \
+                       .format(transact_id, self.accounts[account_from].account_id, funds, self.accounts[account_to].balance)
+
+    def check_balance(self, account=None, transact_id=None):
+        if not account or account not in self.accounts:
+            return account, "{}: INVALID ACCOUNT\n".format(account)
+        else:
+            return self.accounts[account].balance,\
+                "{} --> CHECK BALANCE COMPLETED: {} BALANCE: {}\n"\
+                .format(transact_id, self.accounts[account].account_id, self.accounts[account].balance)
 
 
-    pass
-
-
-class BankAccount:
-    def __init__(self, account_id=0, funds=0):
-        self.account_id = account_id
-        self.balance = funds
-        pass
 
